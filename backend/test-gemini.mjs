@@ -7,7 +7,7 @@ const apiKey = process.env.GEMINI_API_KEY;
 
 try {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   
   const prompt = `You are a civic issue triage assistant.
 Analyze this complaint and SUGGEST a department and severity. The system will make the final decision.

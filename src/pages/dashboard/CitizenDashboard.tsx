@@ -19,6 +19,7 @@ import {
 import { Complaint, TimelineEvent } from '@/types/complaint';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeDate, formatDate, formatRelativeTime } from '@/lib/dateUtils';
 import { AgentModeToggle, useAgentMode } from '@/components/AgentModeToggle';
 import { AgentDecisionPanel } from '@/components/AgentDecisionPanel';
 import { LiveAgentConsole } from '@/components/LiveAgentConsole';
@@ -176,7 +177,15 @@ export default function CitizenDashboard() {
     if (!c.nextEscalationAt) {
       return null;
     }
-    return new Date(c.nextEscalationAt);
+    const date = normalizeDate(c.nextEscalationAt);
+    return date;
+  };
+
+  const getEscalationColor = (level: number) => {
+    if (level === 0) return 'text-muted-foreground';
+    if (level === 1) return 'text-yellow-400';
+    if (level === 2) return 'text-orange-400';
+    return 'text-red-400';
   };
 
   const formatRemaining = (ms: number) => {
@@ -276,6 +285,34 @@ export default function CitizenDashboard() {
         </div>
 
         {/* Location Status Banner */}
+        {loadError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20"
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-destructive">Live sync interrupted</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {loadError} Showing cached data. Click refresh to retry.
+                </p>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  setLoadError(null);
+                  window.location.reload();
+                }}
+              >
+                Refresh
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
         {locationError && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -394,9 +431,13 @@ export default function CitizenDashboard() {
                           {complaint.severity}
                         </span>
                         {complaint.escalationLevel > 0 && (
-                          <span className="text-xs font-medium text-destructive">
-                            Escalated L{complaint.escalationLevel}
-                          </span>
+                          <motion.span
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1 }}
+                            className={`text-xs font-bold px-2 py-0.5 rounded ${getEscalationColor(complaint.escalationLevel)} bg-opacity-10`}
+                          >
+                            🚨 L{complaint.escalationLevel} Escalated
+                          </motion.span>
                         )}
                         {complaint.status === 'sla_warning' && (
                           <span className="text-xs font-medium text-warning">SLA WARNING</span>
@@ -409,20 +450,29 @@ export default function CitizenDashboard() {
                         <span>Category: {complaint.category}</span>
                         <span>Status: {statusLabel(complaint.status)}</span>
                         <span>Priority: {complaint.priority}/10</span>
-                        <span>Confidence: {(complaint.confidenceScore * 100).toFixed(0)}%</span>
+                        <span>
+                          {complaint.confidenceScore && complaint.confidenceScore > 0
+                            ? `Confidence: ${(complaint.confidenceScore * 100).toFixed(0)}%`
+                            : 'Confidence: Unavailable (AI Offline)'}
+                        </span>
                         {(() => {
                           const deadline = getDeadline(complaint);
                           if (!deadline) {
-                            return <span className="text-muted-foreground">No SLA</span>;
+                            return <span className="text-primary text-xs">Auto-Escalates every 10s (Demo)</span>;
                           }
                           const remaining = deadline.getTime() - nowTick;
                           return (
-                            <span className={remaining < 0 ? 'text-destructive' : ''}>
-                              SLA: {formatRemaining(remaining)}
+                            <span className={remaining < 0 ? 'text-destructive' : 'text-primary'}>
+                              Next escalation: {formatRemaining(remaining)}
                             </span>
                           );
                         })()}
-                        <span className="text-primary font-semibold">AI: Gemini Vision</span>
+                        <span 
+                          className="text-primary font-semibold flex items-center gap-1 cursor-help" 
+                          title="AI suggests. System enforces. No silent failures."
+                        >
+                          🧠 AI Advisory
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -462,16 +512,16 @@ export default function CitizenDashboard() {
 
             {timelineLoading ? (
               <div className="py-8 text-center text-muted-foreground">Loading timeline...</div>
-            ) : timeline.length === 0 ? (
+            ) : (timeline ?? []).length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">No timeline events yet.</div>
             ) : (
               <div className="space-y-3">
-                {timeline.map((e, idx) => (
+                {(timeline ?? []).map((e, idx) => (
                   <div key={idx} className="p-3 rounded-lg bg-white/5 border border-white/[0.06]">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-medium uppercase text-muted-foreground">{e.type}</span>
                       <span className="text-xs text-muted-foreground">
-                        {new Date(e.timestamp as any).toLocaleString()}
+                        {formatDate(e.timestamp)}
                       </span>
                     </div>
                     <p className="text-sm mt-1">{e.message}</p>

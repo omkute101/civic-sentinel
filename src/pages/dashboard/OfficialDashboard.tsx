@@ -18,6 +18,7 @@ import {
 import { api } from '@/lib/api';
 import { Complaint, OfficialStats, TimelineEvent } from '@/types/complaint';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeDate, formatDate } from '@/lib/dateUtils';
 import { AgentModeToggle, useAgentMode } from '@/components/AgentModeToggle';
 import { AgentDecisionPanel } from '@/components/AgentDecisionPanel';
 import { LiveAgentConsole } from '@/components/LiveAgentConsole';
@@ -30,6 +31,7 @@ export default function OfficialDashboard() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [stats, setStats] = useState<OfficialStats | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(Date.now());
@@ -50,6 +52,7 @@ export default function OfficialDashboard() {
     const loadData = async () => {
       if (!userProfile?.uid) return;
       setLoading(true);
+      setLoadError(null);
       try {
         const [{ complaints }, { stats }, aiBriefRes] = await Promise.all([
           api.getOfficialComplaints(userProfile.department || userProfile.uid),
@@ -66,13 +69,8 @@ export default function OfficialDashboard() {
         }
       } catch (error) {
         console.error('Failed to load official data:', error);
-        // 🔥 DEFENSIVE: Set empty array on error to prevent crash
-        setComplaints([]);
-        toast({
-          title: 'Unable to load data',
-          description: error instanceof Error ? error.message : 'Please try again.',
-          variant: 'destructive',
-        });
+        // 🔥 DEFENSIVE: Preserve existing list on error, show banner
+        setLoadError(error instanceof Error ? error.message : 'Unable to connect to server.');
       } finally {
         setLoading(false);
       }
@@ -151,10 +149,14 @@ export default function OfficialDashboard() {
   // 🔥 AGENTIC STATE MACHINE: Read nextEscalationAt directly, DO NOT compute
   const getDeadline = (c: Complaint) => {
     // Use authoritative nextEscalationAt field only
-    if (!c.nextEscalationAt) {
-      return null;
-    }
-    return new Date(c.nextEscalationAt);
+    return normalizeDate(c.nextEscalationAt);
+  };
+
+  const getEscalationColor = (level: number) => {
+    if (level === 0) return 'text-muted-foreground';
+    if (level === 1) return 'text-yellow-500';
+    if (level === 2) return 'text-orange-500';
+    return 'text-red-500';
   };
 
   const formatRemaining = (ms: number) => {
@@ -299,6 +301,35 @@ export default function OfficialDashboard() {
           </div>
         </div>
 
+        {/* Error Banner */}
+        {loadError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20"
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-destructive">Live sync interrupted</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {loadError} Showing cached data. Click refresh to retry.
+                </p>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  setLoadError(null);
+                  window.location.reload();
+                }}
+              >
+                Refresh
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {statCards.map((stat, index) => (
@@ -396,9 +427,14 @@ export default function OfficialDashboard() {
                           {complaint.severity}
                         </span>
                         {complaint.escalationLevel > 0 && (
-                          <span className="text-xs font-medium text-destructive">
+                          <motion.span
+                            key={`escalation-${complaint.id}-${complaint.escalationLevel}`}
+                            initial={{ scale: 1.2, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className={`text-xs font-medium ${getEscalationColor(complaint.escalationLevel)}`}
+                          >
                             Escalated L{complaint.escalationLevel}
-                          </span>
+                          </motion.span>
                         )}
                         {complaint.status === 'sla_warning' && (
                           <span className="text-xs font-medium text-warning">SLA WARNING</span>
@@ -410,13 +446,28 @@ export default function OfficialDashboard() {
                         <span>Status: {statusLabel(complaint.status)}</span>
                         <span>Dept: {complaint.assignedDepartment}</span>
                         <span>
+                          {complaint.confidenceScore && complaint.confidenceScore > 0
+                            ? `Confidence: ${(complaint.confidenceScore * 100).toFixed(0)}%`
+                            : 'Confidence: Unavailable (AI Offline)'}
+                        </span>
+                        <span 
+                          className="text-primary font-semibold flex items-center gap-1 cursor-help" 
+                          title="AI suggests. System enforces. No silent failures."
+                        >
+                          🧠 AI Advisory
+                        </span>
+                        <span>
                           {(() => {
                             const deadline = getDeadline(complaint);
                             if (!deadline) {
-                              return 'SLA: N/A';
+                              return <span className="text-primary text-xs">Auto-Escalates every 10s (Demo)</span>;
                             }
                             const remaining = deadline.getTime() - nowTick;
-                            return `SLA: ${formatRemaining(remaining)}`;
+                            return (
+                              <span className={remaining < 0 ? 'text-destructive' : 'text-primary'}>
+                                Next escalation: {formatRemaining(remaining)}
+                              </span>
+                            );
                           })()}
                         </span>
                         <Button size="sm" variant="ghost" onClick={() => openTimeline(complaint)}>
@@ -475,16 +526,16 @@ export default function OfficialDashboard() {
 
             {timelineLoading ? (
               <div className="py-8 text-center text-muted-foreground">Loading timeline...</div>
-            ) : timeline.length === 0 ? (
+            ) : (timeline ?? []).length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">No timeline events yet.</div>
             ) : (
               <div className="space-y-3">
-                {timeline.map((e, idx) => (
+                {(timeline ?? []).map((e, idx) => (
                   <div key={idx} className="p-3 rounded-lg bg-white/5 border border-white/[0.06]">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-medium uppercase text-muted-foreground">{e.type}</span>
                       <span className="text-xs text-muted-foreground">
-                        {new Date(e.timestamp as any).toLocaleString()}
+                        {formatDate(e.timestamp, 'Time unknown')}
                       </span>
                     </div>
                     <p className="text-sm mt-1">{e.message}</p>

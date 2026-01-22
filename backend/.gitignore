@@ -10,4 +10,5 @@ npm-debug.log*
 *.swp
 *.swo
 firebase-admin.json
-
+firebase-admin*.json
+*-firebase-adminsdk-*.json

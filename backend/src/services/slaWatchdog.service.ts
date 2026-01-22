@@ -17,7 +17,6 @@ const ACTIVE_STATUSES = [
 // Dynamic watchdog interval: 1s in demo mode, 60s in production
 const DEMO_SLA_SECONDS = Number(process.env.DEMO_SLA_SECONDS ?? '0');
 const WATCHDOG_INTERVAL_MS = DEMO_SLA_SECONDS > 0 && DEMO_SLA_SECONDS <= 30 ? 1000 : 60000;
-
 function getDeadline(complaint: Complaint): Date {
   return complaint.slaDeadline ?? complaint.expectedResolutionTime;
 }
@@ -87,14 +86,14 @@ export class SLAWatchdogService {
       for (const raw of overdue) {
         const complaint = (await firebaseService.getComplaint(raw.id)) as Complaint | null;
         if (!complaint) continue;
-        
+
         // CRITICAL: Skip resolved or already-escalated complaints (idempotency)
         if (complaint.status === 'resolved' || complaint.status === 'escalated') continue;
 
         const deadline = getDeadline(complaint);
         const nowMs = now.getTime();
         const slaMs = deadline.getTime();
-        
+
         // Double-check SLA breach with correct comparison
         if (nowMs <= slaMs) continue;
 
@@ -162,7 +161,6 @@ export class SLAWatchdogService {
         });
 
         console.log(`[SLA] ${complaint.id}: ${oldStatus} → ${newStatus}`);
-
         updatedIds.push(complaint.id);
         escalatedForAI.push({
           id: complaint.id,

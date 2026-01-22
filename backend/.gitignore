@@ -10,4 +10,4 @@ npm-debug.log*
 *.swp
 *.swo
 firebase-admin.json
-*.json
+

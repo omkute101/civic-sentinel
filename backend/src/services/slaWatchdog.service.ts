@@ -14,13 +14,17 @@ const ACTIVE_STATUSES = [
   'escalated',
 ] as const;
 
+// Dynamic watchdog interval: 1s in demo mode, 60s in production
+const DEMO_SLA_SECONDS = Number(process.env.DEMO_SLA_SECONDS ?? '0');
+const WATCHDOG_INTERVAL_MS = DEMO_SLA_SECONDS > 0 && DEMO_SLA_SECONDS <= 30 ? 1000 : 60000;
+
 function getDeadline(complaint: Complaint): Date {
   return complaint.slaDeadline ?? complaint.expectedResolutionTime;
 }
 
 /**
  * Runs inside the Node process (no external scheduler) and enforces SLA deadlines.
- * - every 60s
+ * - every 1s in demo mode (DEMO_SLA_SECONDS <= 30), 60s in production
  * - finds overdue, non-resolved complaints
  * - increments escalationLevel, updates status, extends SLA, appends timeline
  */
@@ -35,8 +39,8 @@ export class SLAWatchdogService {
     setTimeout(() => this.tick().catch((e) => console.error('SLA watchdog tick failed:', e)), initialDelayMs);
     this.timer = setInterval(() => {
       this.tick().catch((e) => console.error('SLA watchdog tick failed:', e));
-    }, 60_000);
-    console.log('⏱️  SLA watchdog started (60s interval)');
+    }, WATCHDOG_INTERVAL_MS);
+    console.log(`⏱️  SLA watchdog started (${WATCHDOG_INTERVAL_MS}ms interval)`);
   }
 
   stop() {
@@ -51,6 +55,7 @@ export class SLAWatchdogService {
   async tick(): Promise<{ scanned: number; escalated: number; updatedIds: string[] }> {
     if (this.running) return { scanned: 0, escalated: 0, updatedIds: [] };
     this.running = true;
+    console.log(`[SLA WATCHDOG] Tick at ${new Date().toISOString()}`);
     try {
       const db = admin.firestore();
       const now = new Date();
@@ -68,7 +73,7 @@ export class SLAWatchdogService {
       const overdue = complaints.filter((c) => {
         const deadline = c.slaDeadline?.toDate?.() || c.expectedResolutionTime?.toDate?.();
         if (!deadline) return false;
-        return deadline.getTime() < now.getTime();
+        return now.getTime() > deadline.getTime();
       });
 
       const updatedIds: string[] = [];
@@ -82,64 +87,88 @@ export class SLAWatchdogService {
       for (const raw of overdue) {
         const complaint = (await firebaseService.getComplaint(raw.id)) as Complaint | null;
         if (!complaint) continue;
-        if (complaint.status === 'resolved') continue;
+        
+        // CRITICAL: Skip resolved or already-escalated complaints (idempotency)
+        if (complaint.status === 'resolved' || complaint.status === 'escalated') continue;
 
         const deadline = getDeadline(complaint);
-        if (deadline.getTime() >= now.getTime()) continue; // double-check after fresh read
+        const nowMs = now.getTime();
+        const slaMs = deadline.getTime();
+        
+        // Double-check SLA breach with correct comparison
+        if (nowMs <= slaMs) continue;
 
-        const prevLevel = complaint.escalationLevel ?? 0;
-        const nextLevel = Math.min(prevLevel + 1, 3) as 0 | 1 | 2 | 3;
+        const oldStatus = complaint.status;
+        let newStatus: string;
+        let newLevel: 0 | 1 | 2 | 3;
+        let message: string;
 
-        // Status transitions per spec:
-        // - first breach -> sla_warning
-        // - second breach -> escalated
-        // - further breaches keep escalated (but keep leveling up to max 3)
-        const nextStatus =
-          nextLevel === 1 ? ('sla_warning' as const) : ('escalated' as const);
+        // STRICT one-way status transitions (idempotent)
+        if (oldStatus === 'analyzed' || oldStatus === 'in_progress' || oldStatus === 'submitted') {
+          newStatus = 'sla_warning';
+          newLevel = 1;
+          message = 'SLA breached – warning issued';
+        } else if (oldStatus === 'sla_warning') {
+          newStatus = 'escalated';
+          newLevel = 2;
+          message = 'SLA escalated to level 2';
+        } else {
+          // No further transitions (idempotency critical)
+          continue;
+        }
 
         const elapsedSeconds = Math.max(
           1,
           Math.round((now.getTime() - complaint.createdAt.getTime()) / 1000)
         );
-        const hoursElapsed = complaint.slaHours ?? Math.max(1, Math.round(elapsedSeconds / 3600));
-        const message = `System auto-escalated due to SLA breach (${hoursElapsed}h elapsed, no action).`;
 
         const demoSeconds = Number(process.env.DEMO_SLA_SECONDS ?? '10');
         const extensionMs =
           demoSeconds > 0 ? demoSeconds * 1000 : 24 * 60 * 60 * 1000;
         const newDeadline = new Date(now.getTime() + extensionMs);
 
+        // Atomic Firestore update
         await firebaseService.updateComplaintFields(complaint.id, {
-          escalationLevel: nextLevel,
-          status: nextStatus,
+          escalationLevel: newLevel,
+          status: newStatus as any,
           updatedAt: now,
           slaDeadline: newDeadline,
-          expectedResolutionTime: newDeadline, // keep legacy UI consistent
+          expectedResolutionTime: newDeadline,
         });
 
+        // Write timeline event ONLY when status changes (prevents quota exhaustion)
         await firebaseService.appendTimelineEvent(complaint.id, {
           type: 'system',
-          action: nextStatus === 'sla_warning' ? 'sla_warning' : 'escalated',
+          action: newStatus === 'sla_warning' ? 'sla_warning' : 'escalated',
           message,
           timestamp: now,
         });
 
-        // Also append a short audit entry for older UI flows
+        // Also append audit entry
         await db.collection('complaints').doc(complaint.id).update({
           auditLog: admin.firestore.FieldValue.arrayUnion({
             timestamp: nowTs,
-            action: nextStatus === 'sla_warning' ? 'SLA warning issued' : `Escalated to level ${nextLevel}`,
+            action: newStatus === 'sla_warning' ? 'SLA warning issued' : `Escalated to level ${newLevel}`,
             actor: 'system',
-            details: { prevLevel, nextLevel, previousDeadline: admin.firestore.Timestamp.fromDate(deadline), newDeadline: admin.firestore.Timestamp.fromDate(newDeadline) },
+            details: { 
+              oldStatus, 
+              newStatus, 
+              prevLevel: complaint.escalationLevel ?? 0, 
+              newLevel, 
+              previousDeadline: admin.firestore.Timestamp.fromDate(deadline), 
+              newDeadline: admin.firestore.Timestamp.fromDate(newDeadline) 
+            },
           }),
         });
+
+        console.log(`[SLA] ${complaint.id}: ${oldStatus} → ${newStatus}`);
 
         updatedIds.push(complaint.id);
         escalatedForAI.push({
           id: complaint.id,
           department: complaint.department ?? complaint.assignedDepartment,
           severity: complaint.severity,
-          status: nextStatus,
+          status: newStatus,
           elapsedSeconds,
         });
       }

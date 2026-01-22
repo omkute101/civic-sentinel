@@ -23,6 +23,9 @@ import OfficialOnboarding from "./pages/onboarding/OfficialOnboarding";
 import CitizenDashboard from "./pages/dashboard/CitizenDashboard";
 import OfficialDashboard from "./pages/dashboard/OfficialDashboard";
 
+// Report Page
+import ReportIssue from "./pages/ReportIssue";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -36,23 +39,31 @@ const App = () => (
             {/* Public Routes */}
             <Route path="/" element={<Index />} />
             <Route path="/system" element={<System />} />
-            
+
             {/* Auth Routes */}
             <Route path="/get-started" element={<GetStarted />} />
             <Route path="/auth" element={<AuthGateway />} />
             <Route path="/auth/official" element={<OfficialAuth />} />
             <Route path="/role-selection" element={<RoleSelection />} />
-            
+
             {/* Onboarding Routes */}
             <Route path="/onboarding/citizen" element={<CitizenOnboarding />} />
             <Route path="/onboarding/official" element={<OfficialOnboarding />} />
-            
+
             {/* Protected Dashboard Routes */}
             <Route
               path="/dashboard/citizen"
               element={
                 <ProtectedRoute allowedRoles={['citizen']}>
                   <CitizenDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/report"
+              element={
+                <ProtectedRoute allowedRoles={['citizen']}>
+                  <ReportIssue />
                 </ProtectedRoute>
               }
             />
@@ -64,7 +75,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            
+
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
           </Routes>

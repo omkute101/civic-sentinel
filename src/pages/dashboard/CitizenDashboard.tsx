@@ -19,7 +19,6 @@ import {
 import { Complaint, TimelineEvent } from '@/types/complaint';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { ComplaintSubmissionModal } from '@/components/ComplaintSubmissionModal';
 import { AgentModeToggle, useAgentMode } from '@/components/AgentModeToggle';
 import { AgentDecisionPanel } from '@/components/AgentDecisionPanel';
 import { LiveAgentConsole } from '@/components/LiveAgentConsole';
@@ -33,7 +32,6 @@ export default function CitizenDashboard() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [nowTick, setNowTick] = useState(Date.now());
   const [selected, setSelected] = useState<Complaint | null>(null);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
@@ -86,12 +84,12 @@ export default function CitizenDashboard() {
     );
   }, []);
 
-  // Handle report action from onboarding
+  // Handle report action from onboarding - redirect to report page
   useEffect(() => {
     if (searchParams.get('action') === 'report') {
-      setIsModalOpen(true);
+      navigate('/report');
     }
-  }, [searchParams]);
+  }, [searchParams, navigate]);
 
   useEffect(() => {
     const fetchComplaints = async () => {
@@ -146,10 +144,6 @@ export default function CitizenDashboard() {
       { label: 'Escalated', value: escalated, icon: AlertCircle, color: 'destructive' },
     ];
   }, [complaints]);
-
-  const handleSubmitSuccess = (complaint: Complaint) => {
-    setComplaints((prev) => [complaint, ...prev]);
-  };
 
   const severityColor = (severity: string) => {
     if (severity === 'critical') return 'text-destructive';
@@ -253,7 +247,7 @@ export default function CitizenDashboard() {
             </div>
           </div>
 
-          <Button className="bg-primary hover:bg-primary/90 h-11" onClick={() => setIsModalOpen(true)}>
+          <Button className="bg-primary hover:bg-primary/90 h-11" onClick={() => navigate('/report')}>
             <Plus className="w-4 h-4 mr-2" />
             Report New Issue
           </Button>
@@ -350,7 +344,7 @@ export default function CitizenDashboard() {
               <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
                 Report your first civic issue and CivicFix AI will ensure it gets resolved.
               </p>
-              <Button className="bg-primary hover:bg-primary/90" onClick={() => setIsModalOpen(true)}>
+              <Button className="bg-primary hover:bg-primary/90" onClick={() => navigate('/report')}>
                 <Plus className="w-4 h-4 mr-2" />
                 Report an Issue
               </Button>
@@ -452,18 +446,6 @@ export default function CitizenDashboard() {
           </motion.div>
         )}
       </main>
-
-      {userProfile?.uid && (
-        <ComplaintSubmissionModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          citizenId={userProfile.uid}
-          citizenName={userProfile.displayName || 'Citizen'}
-          coordinates={coordinates}
-          locationName={locationName || userProfile.location || userProfile.city || 'Unknown Location'}
-          onSuccess={handleSubmitSuccess}
-        />
-      )}
     </div>
   );
 }

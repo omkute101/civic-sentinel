@@ -6,7 +6,7 @@ if (!process.env.GEMINI_API_KEY) {
   console.error('⚠️  GEMINI_API_KEY is missing! Gemini calls will fail.');
 }
 
-const GEMINI_TIMEOUT_MS = 10000; // 10 seconds for API calls
+const GEMINI_TIMEOUT_MS = 60000; // 60 seconds for image analysis API calls
 
 // Initialize Gemini with API key
 function getModel() {

@@ -28,6 +28,8 @@ export interface UserProfile {
   department?: string;
   designation?: string;
   jurisdiction?: string;
+  // In-app currency
+  currency?: number;
 }
 
 interface AuthContextType {
@@ -60,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const docRef = doc(db, 'users', uid);
       const docSnap = await getDoc(docRef);
-      
+
       if (docSnap.exists()) {
         const data = docSnap.data();
         return {
@@ -77,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           department: data.department,
           designation: data.designation,
           jurisdiction: data.jurisdiction,
+          currency: data.currency || 0,
         } as UserProfile;
       }
       return null;
@@ -119,14 +122,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (firebaseUser) {
         setUser(firebaseUser);
-        
+
         // Fetch or create user profile
         let profile = await fetchUserProfile(firebaseUser.uid);
-        
+
         if (!profile) {
           profile = await createUserProfile(firebaseUser);
         }
-        
+
         setUserProfile(profile);
       } else {
         setUser(null);
@@ -186,7 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Set user role after role selection
   const setUserRole = async (role: 'citizen' | 'official') => {
     if (!user) throw new Error('No user logged in');
-    
+
     try {
       await updateDoc(doc(db, 'users', user.uid), { role } as any);
       setUserProfile((prev) => prev ? { ...prev, role } : null);
@@ -199,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Update user profile
   const updateUserProfile = async (data: Partial<UserProfile>) => {
     if (!user) throw new Error('No user logged in');
-    
+
     // Remove undefined values and convert to plain object
     const cleanData: Record<string, any> = {};
     Object.entries(data).forEach(([key, value]) => {
@@ -207,7 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cleanData[key] = value;
       }
     });
-    
+
     try {
       await updateDoc(doc(db, 'users', user.uid), cleanData);
       setUserProfile((prev) => prev ? { ...prev, ...cleanData } : null);
@@ -220,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Mark onboarding as complete
   const completeOnboarding = async () => {
     if (!user) throw new Error('No user logged in');
-    
+
     try {
       await updateDoc(doc(db, 'users', user.uid), { onboardingComplete: true } as any);
       setUserProfile((prev) => prev ? { ...prev, onboardingComplete: true } : null);
@@ -233,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Refresh user profile from Firestore
   const refreshUserProfile = async () => {
     if (!user) return;
-    
+
     const profile = await fetchUserProfile(user.uid);
     if (profile) {
       setUserProfile(profile);

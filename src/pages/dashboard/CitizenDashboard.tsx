@@ -15,6 +15,7 @@ import {
   Search,
   MapPin,
   AlertTriangle,
+  Coins,
 } from 'lucide-react';
 import { Complaint, TimelineEvent } from '@/types/complaint';
 import { api } from '@/lib/api';
@@ -235,6 +236,15 @@ export default function CitizenDashboard() {
                 </span>
               </Button>
 
+              {/* Currency Balance Display */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                <Coins className="w-4 h-4 text-yellow-400" />
+                <span className="text-sm font-semibold text-yellow-400">
+                  {userProfile?.currency || 0}
+                </span>
+                <span className="text-xs text-yellow-400/70 hidden sm:inline">CivicCoins</span>
+              </div>
+
               <div className="flex items-center gap-3">
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-medium">{userProfile?.displayName || 'Citizen'}</p>
@@ -296,8 +306,8 @@ export default function CitizenDashboard() {
                   {loadError} Showing cached data. Click refresh to retry.
                 </p>
               </div>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   setLoadError(null);
@@ -391,21 +401,21 @@ export default function CitizenDashboard() {
           </div>
 
           {loading ? (
-             <div className="py-12 text-center text-muted-foreground">Loading board...</div>
+            <div className="py-12 text-center text-muted-foreground">Loading board...</div>
           ) : (
             <div className="min-h-[500px]">
-                <KanbanBoard
-                   complaints={filteredComplaints}
-                   onDragEnd={() => {}} // No-op for read-only
-                   onView={openTimeline}
-                   isDragEnabled={false} // READ-ONLY MODE
-                   showCitizenName={false}
-                   columnTitles={{
-                     todo: 'Submitted Complaints',
-                     in_progress: 'In Progress',
-                     done: 'Resolved'
-                   }}
-                />
+              <KanbanBoard
+                complaints={filteredComplaints}
+                onDragEnd={() => { }} // No-op for read-only
+                onView={openTimeline}
+                isDragEnabled={false} // READ-ONLY MODE
+                showCitizenName={false}
+                columnTitles={{
+                  todo: 'Submitted Complaints',
+                  in_progress: 'In Progress',
+                  done: 'Resolved'
+                }}
+              />
             </div>
           )}
         </motion.div>
@@ -452,7 +462,7 @@ export default function CitizenDashboard() {
           </motion.div>
         )}
       </main>
-      
+
       {/* AI Chat Widget */}
       <AiChatWidget />
     </div>

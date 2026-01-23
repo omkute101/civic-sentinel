@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Complaint, GeminiAnalysisResult, AgentDecision, AuthenticityStatus } from '../types/complaint.js';
+import { Complaint, GeminiAnalysisResult, AgentDecision, AuthenticityStatus, CURRENCY_REWARDS } from '../types/complaint.js';
 import { geminiService } from './gemini.service.js';
 import { firebaseService } from './firebase.service.js';
 import { translateService } from './translate.service.js';
@@ -40,14 +40,14 @@ export class ComplaintService {
       translatedTitle = translation.translatedText;
       language = translation.detectedLanguage;
       wasTranslated = translation.wasTranslated;
-      
+
       if (wasTranslated) {
-          console.log(`🗣️ Translated: "${originalTitle}" -> "${translatedTitle}" (${language})`);
+        console.log(`🗣️ Translated: "${originalTitle}" -> "${translatedTitle}" (${language})`);
       }
     } catch (err) {
       console.warn('⚠️ Translation failed, using original title:', err);
     }
-    
+
     // Use translated title for AI analysis
     const analysisTitle = translatedTitle;
 
@@ -237,6 +237,30 @@ export class ComplaintService {
       notes,
       timestamp: new Date(),
     });
+
+    // Award currency when status changes to in_progress (only once)
+    if (status === 'in_progress' && !complaint.currencyEarned) {
+      const reward = CURRENCY_REWARDS[complaint.severity] || CURRENCY_REWARDS.low;
+
+      // Update complaint with currency earned
+      await firebaseService.updateComplaintFields(complaintId, {
+        currencyEarned: reward,
+        currencyAwardedAt: new Date(),
+      });
+
+      // Update citizen's total currency balance
+      await firebaseService.updateCitizenCurrency(complaint.citizenId, reward);
+
+      // Add timeline event for currency award
+      await firebaseService.appendTimelineEvent(complaintId, {
+        type: 'system',
+        action: 'currency_awarded',
+        message: `Citizen earned ${reward} CivicCoins for verified report (${complaint.severity} severity)`,
+        timestamp: new Date(),
+      });
+
+      console.log(`💰 Awarded ${reward} CivicCoins to citizen ${complaint.citizenId} for complaint ${complaintId}`);
+    }
 
     // If resolved, record completion time
     if (status === 'resolved') {

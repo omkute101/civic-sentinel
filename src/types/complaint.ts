@@ -87,7 +87,7 @@ export interface Complaint {
   // Status tracking
   status: ComplaintStatus;
   assignedOfficialId?: string;
-  
+
   /**
    * AGENTIC STATE MACHINE (AUTHORITATIVE)
    * nextEscalationAt is the ONLY source of truth for when to escalate.
@@ -100,6 +100,13 @@ export interface Complaint {
   auditLog: AuditEntry[];
   /** Agent decision - verbatim Gemini output for proof of AI agency */
   agentDecision?: AgentDecision;
+
+  // In-app currency rewards
+  currencyEarned?: number;
+  currencyAwardedAt?: string | Date;
+
+  // Resolution verification
+  resolutionVerified?: boolean;
 }
 
 export interface OfficialStats {

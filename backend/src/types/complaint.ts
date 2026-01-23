@@ -95,7 +95,19 @@ export interface Complaint {
   afterImageBase64?: string;
   resolutionVerified?: boolean;
   resolutionConfidence?: number;
+
+  // In-app currency rewards
+  currencyEarned?: number; // Currency earned when marked in_progress
+  currencyAwardedAt?: Date; // Timestamp of when currency was awarded
 }
+
+// Currency reward amounts based on severity
+export const CURRENCY_REWARDS = {
+  critical: 100,
+  high: 100,
+  medium: 50,
+  low: 25,
+} as const;
 
 export type ComplaintStatus =
   | 'submitted'
@@ -133,11 +145,11 @@ export interface GeminiAnalysisResult {
   priority: number; // 1-10 score
   confidenceScore: number; // 0.0 - 1.0
   authenticityStatus: AuthenticityStatus; // derived from confidenceScore
-  
+
   // Emergency detection
   isEmergency?: boolean;
   emergencyType?: string | null;
-  
+
   // Sentiment analysis
   sentimentScore?: number;
 }

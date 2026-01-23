@@ -16,7 +16,6 @@ import {
   BarChart3,
   ChevronDown,
   AlertCircle,
-  AlertCircle,
   Brain,
   ShieldCheck,
 } from 'lucide-react';
@@ -39,6 +38,7 @@ import {
 } from '@/components/ui/collapsible';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { DropResult } from '@hello-pangea/dnd';
+import { ComplaintDetailModal } from '@/components/ComplaintDetailModal';
 
 export default function OfficialDashboard() {
   const { userProfile, logout } = useAuth();
@@ -64,6 +64,10 @@ export default function OfficialDashboard() {
     complaint: null,
   });
   const [verifyModal, setVerifyModal] = useState<{ isOpen: boolean; complaint: Complaint | null }>({
+    isOpen: false,
+    complaint: null,
+  });
+  const [detailModal, setDetailModal] = useState<{ isOpen: boolean; complaint: Complaint | null }>({
     isOpen: false,
     complaint: null,
   });
@@ -333,7 +337,8 @@ export default function OfficialDashboard() {
     setSelected(c);
     setTimeline([]);
     setTimelineLoading(true);
-    // If opening via drag, don't auto-open verify modal. But if user clicks verify button... handled separately.
+    // Open detail modal to show image and AI analysis
+    setDetailModal({ isOpen: true, complaint: c });
     try {
       const res = await api.getComplaintTimeline(c.id);
       setTimeline(res.timeline);
@@ -399,37 +404,37 @@ export default function OfficialDashboard() {
     const columnId = destination.droppableId;
 
     if (columnId === 'todo') {
-       // If moving back to todo, reset to assigned or analyzed
-       newStatus = 'assigned'; 
+      // If moving back to todo, reset to assigned or analyzed
+      newStatus = 'assigned';
     } else if (columnId === 'in_progress') {
-       newStatus = 'in_progress';
+      newStatus = 'in_progress';
     } else if (columnId === 'done') {
-       newStatus = 'resolved';
+      newStatus = 'resolved';
     }
 
     // Optimistic update
     const previousComplaints = [...complaints];
-    setComplaints(prev => prev.map(c => 
+    setComplaints(prev => prev.map(c =>
       c.id === draggableId ? { ...c, status: newStatus as any } : c
     ));
 
     try {
-       await api.updateKanbanStatus(draggableId, { 
-         status: newStatus,
-         officialId: userProfile?.uid
-       });
-       toast({
-          title: 'Status updated',
-          description: `Moved to ${columnId.replace('_', ' ')}`,
-       });
+      await api.updateKanbanStatus(draggableId, {
+        status: newStatus,
+        officialId: userProfile?.uid
+      });
+      toast({
+        title: 'Status updated',
+        description: `Moved to ${columnId.replace('_', ' ')}`,
+      });
     } catch (error) {
-       // Revert on failure
-       setComplaints(previousComplaints);
-       toast({
-          title: 'Update failed',
-          description: 'Could not update status. Reverting change.',
-          variant: 'destructive'
-       });
+      // Revert on failure
+      setComplaints(previousComplaints);
+      toast({
+        title: 'Update failed',
+        description: 'Could not update status. Reverting change.',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -509,301 +514,301 @@ export default function OfficialDashboard() {
             </Button>
           </div>
           <div className="flex gap-3">
-             <Button variant="outline" className="border-white/20">
-               <BarChart3 className="w-4 h-4 mr-2" />
-               Reports
-             </Button>
+            <Button variant="outline" className="border-white/20">
+              <BarChart3 className="w-4 h-4 mr-2" />
+              Reports
+            </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-           {/* LEFT COLUMN: Main Dashboard (3/4 width) */}
-           <div className="lg:col-span-3">
+          {/* LEFT COLUMN: Main Dashboard (3/4 width) */}
+          <div className="lg:col-span-3">
 
-        {/* Error Banner */}
-        {loadError && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20"
-          >
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
-              <div className="flex-1">
-                <p className="font-medium text-destructive">Live sync interrupted</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {loadError} Showing cached data. Click refresh to retry.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setLoadError(null);
-                  window.location.reload();
-                }}
+            {/* Error Banner */}
+            {loadError && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20"
               >
-                Refresh
-              </Button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* 🧠 AI PRIORITY BRIEF - DOMINATES VISUAL HIERARCHY */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="mb-8 p-6 rounded-xl glass-panel border border-primary/30 shadow-lg shadow-primary/10"
-        >
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0">
-              <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-primary/20">
-                <Brain className="w-6 h-6 text-primary" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                🧠 AI Priority Brief
-                <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">Live</span>
-              </h2>
-              <div className="grid md:grid-cols-2 gap-4">
-                {aiPriorityBrief.nearingSLA > 0 && (
-                  <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20">
-                    <p className="text-sm font-medium text-destructive">⚠️ {aiPriorityBrief.nearingSLA} issue{aiPriorityBrief.nearingSLA !== 1 ? 's' : ''} nearing SLA breach</p>
-                    <p className="text-xs text-muted-foreground mt-1">Respond within 10 seconds</p>
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-medium text-destructive">Live sync interrupted</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {loadError} Showing cached data. Click refresh to retry.
+                    </p>
                   </div>
-                )}
-                {aiPriorityBrief.escalated > 0 && (
-                  <div className="p-3 rounded-lg bg-warning/5 border border-warning/20">
-                    <p className="text-sm font-medium text-warning">🚨 {aiPriorityBrief.escalated} active escalation{aiPriorityBrief.escalated !== 1 ? 's' : ''}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Citizens have requested higher attention</p>
-                  </div>
-                )}
-                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                  <p className="text-sm font-medium text-primary">📋 Focus area: {aiPriorityBrief.focusArea}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Most common category among {aiPriorityBrief.total} issues</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setLoadError(null);
+                      window.location.reload();
+                    }}
+                  >
+                    Refresh
+                  </Button>
                 </div>
-                <div className={`p-3 rounded-lg ${aiPriorityBrief.riskLevel === 'HIGH' ? 'bg-destructive/5 border border-destructive/20' : aiPriorityBrief.riskLevel === 'MEDIUM' ? 'bg-warning/5 border border-warning/20' : 'bg-success/5 border border-success/20'}`}>
-                  <p className={`text-sm font-medium ${aiPriorityBrief.riskLevel === 'HIGH' ? 'text-destructive' : aiPriorityBrief.riskLevel === 'MEDIUM' ? 'text-warning' : 'text-success'}`}>🔴 Risk level: {aiPriorityBrief.riskLevel}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Citizen impact assessment</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
+              </motion.div>
+            )}
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {statCards.map((stat, index) => (
+            {/* 🧠 AI PRIORITY BRIEF - DOMINATES VISUAL HIERARCHY */}
             <motion.div
-              key={stat.label}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="glass-panel p-5"
+              transition={{ duration: 0.6 }}
+              className="mb-8 p-6 rounded-xl glass-panel border border-primary/30 shadow-lg shadow-primary/10"
             >
-              <div className="flex items-center justify-between mb-3">
-                <stat.icon className={`w-5 h-5 text-${stat.color}`} />
-                <span className={`text-2xl font-bold text-${stat.color}`}>{stat.value}</span>
-              </div>
-              <p className="text-sm text-muted-foreground">{stat.label}</p>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Performance Metrics */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="glass-panel p-6 mb-8"
-        >
-          <div className="flex items-center gap-2 mb-6">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-semibold">Performance Metrics</h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {performanceMetrics.map((metric) => (
-              <div key={metric.label} className="p-4 rounded-xl bg-white/5 border border-white/[0.06]">
-                <p className="text-sm text-muted-foreground mb-2">{metric.label}</p>
-                <p className="text-2xl font-bold font-mono">{metric.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {aiBrief && (
-            <div className="mt-6 p-4 rounded-xl bg-white/5 border border-primary/20">
-              <p className="text-xs font-semibold text-primary mb-1">AI Briefing (Advisory)</p>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">{aiBrief}</p>
-            </div>
-          )}
-        </motion.div>
-
-        {/* Assigned Issues Kanban Board */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="glass-panel p-6"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold">Complaint Board</h2>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search issues..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary"
-              />
-            </div>
-          </div>
-
-          {/* Filter buttons */}
-          <div className="flex gap-2 mb-6">
-            <Button
-              variant={filterStatus === 'all' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilterStatus('all')}
-            >
-              All Issues
-            </Button>
-            <Button
-              variant={filterStatus === 'pending' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilterStatus('pending')}
-            >
-              Pending
-            </Button>
-            <Button
-              variant={filterStatus === 'resolved' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFilterStatus('resolved')}
-            >
-              Resolved
-            </Button>
-          </div>
-
-          {loading && (
-            <div className="py-12 text-center text-muted-foreground">Loading board...</div>
-          )}
-
-          {!loading && (
-             <div className="min-h-[600px]">
-                <KanbanBoard 
-                  complaints={sortedComplaints} 
-                  onDragEnd={onDragEnd}
-                  onView={openTimeline}
-                  isDragEnabled={true}
-                  showCitizenName={true}
-                />
-             </div>
-          )}
-        </motion.div>
-
-        {/* Timeline Panel */}
-        {selected && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass-panel p-6 mt-6"
-          >
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div>
-                <h3 className="text-lg font-semibold">Timeline</h3>
-                <p className="text-xs text-muted-foreground">
-                  Complaint {selected.id} • Status: {statusLabel(selected.status)}
-                </p>
-              </div>
-              <Button variant="outline" onClick={() => setSelected(null)}>
-                Close
-              </Button>
-            </div>
-
-            {timelineLoading ? (
-              <div className="py-8 text-center text-muted-foreground">Loading timeline...</div>
-            ) : (timeline ?? []).length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground">No timeline events yet.</div>
-            ) : (
-              <div className="space-y-3">
-                {(timeline ?? []).map((e, idx) => (
-                  <div key={idx} className="p-3 rounded-lg bg-white/5 border border-white/[0.06]">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs font-medium uppercase text-muted-foreground">{e.type}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDate(e.timestamp, 'Time unknown')}
-                      </span>
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-primary/20">
+                    <Brain className="w-6 h-6 text-primary" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    🧠 AI Priority Brief
+                    <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">Live</span>
+                  </h2>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {aiPriorityBrief.nearingSLA > 0 && (
+                      <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20">
+                        <p className="text-sm font-medium text-destructive">⚠️ {aiPriorityBrief.nearingSLA} issue{aiPriorityBrief.nearingSLA !== 1 ? 's' : ''} nearing SLA breach</p>
+                        <p className="text-xs text-muted-foreground mt-1">Respond within 10 seconds</p>
+                      </div>
+                    )}
+                    {aiPriorityBrief.escalated > 0 && (
+                      <div className="p-3 rounded-lg bg-warning/5 border border-warning/20">
+                        <p className="text-sm font-medium text-warning">🚨 {aiPriorityBrief.escalated} active escalation{aiPriorityBrief.escalated !== 1 ? 's' : ''}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Citizens have requested higher attention</p>
+                      </div>
+                    )}
+                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                      <p className="text-sm font-medium text-primary">📋 Focus area: {aiPriorityBrief.focusArea}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Most common category among {aiPriorityBrief.total} issues</p>
                     </div>
-                    <p className="text-sm mt-1">{e.message}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Action: {e.action}</p>
+                    <div className={`p-3 rounded-lg ${aiPriorityBrief.riskLevel === 'HIGH' ? 'bg-destructive/5 border border-destructive/20' : aiPriorityBrief.riskLevel === 'MEDIUM' ? 'bg-warning/5 border border-warning/20' : 'bg-success/5 border border-success/20'}`}>
+                      <p className={`text-sm font-medium ${aiPriorityBrief.riskLevel === 'HIGH' ? 'text-destructive' : aiPriorityBrief.riskLevel === 'MEDIUM' ? 'text-warning' : 'text-success'}`}>🔴 Risk level: {aiPriorityBrief.riskLevel}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Citizen impact assessment</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              {statCards.map((stat, index) => (
+                <motion.div
+                  key={stat.label}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="glass-panel p-5"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <stat.icon className={`w-5 h-5 text-${stat.color}`} />
+                    <span className={`text-2xl font-bold text-${stat.color}`}>{stat.value}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{stat.label}</p>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Performance Metrics */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="glass-panel p-6 mb-8"
+            >
+              <div className="flex items-center gap-2 mb-6">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                <h2 className="text-lg font-semibold">Performance Metrics</h2>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6">
+                {performanceMetrics.map((metric) => (
+                  <div key={metric.label} className="p-4 rounded-xl bg-white/5 border border-white/[0.06]">
+                    <p className="text-sm text-muted-foreground mb-2">{metric.label}</p>
+                    <p className="text-2xl font-bold font-mono">{metric.value}</p>
                   </div>
                 ))}
               </div>
+
+              {aiBrief && (
+                <div className="mt-6 p-4 rounded-xl bg-white/5 border border-primary/20">
+                  <p className="text-xs font-semibold text-primary mb-1">AI Briefing (Advisory)</p>
+                  <p className="text-sm text-muted-foreground whitespace-pre-line">{aiBrief}</p>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Assigned Issues Kanban Board */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="glass-panel p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold">Complaint Board</h2>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search issues..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9 pr-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              {/* Filter buttons */}
+              <div className="flex gap-2 mb-6">
+                <Button
+                  variant={filterStatus === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilterStatus('all')}
+                >
+                  All Issues
+                </Button>
+                <Button
+                  variant={filterStatus === 'pending' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilterStatus('pending')}
+                >
+                  Pending
+                </Button>
+                <Button
+                  variant={filterStatus === 'resolved' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilterStatus('resolved')}
+                >
+                  Resolved
+                </Button>
+              </div>
+
+              {loading && (
+                <div className="py-12 text-center text-muted-foreground">Loading board...</div>
+              )}
+
+              {!loading && (
+                <div className="min-h-[600px]">
+                  <KanbanBoard
+                    complaints={sortedComplaints}
+                    onDragEnd={onDragEnd}
+                    onView={openTimeline}
+                    isDragEnabled={true}
+                    showCitizenName={true}
+                  />
+                </div>
+              )}
+            </motion.div>
+
+            {/* Timeline Panel */}
+            {selected && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="glass-panel p-6 mt-6"
+              >
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Timeline</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Complaint {selected.id} • Status: {statusLabel(selected.status)}
+                    </p>
+                  </div>
+                  <Button variant="outline" onClick={() => setSelected(null)}>
+                    Close
+                  </Button>
+                </div>
+
+                {timelineLoading ? (
+                  <div className="py-8 text-center text-muted-foreground">Loading timeline...</div>
+                ) : (timeline ?? []).length === 0 ? (
+                  <div className="py-8 text-center text-muted-foreground">No timeline events yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {(timeline ?? []).map((e, idx) => (
+                      <div key={idx} className="p-3 rounded-lg bg-white/5 border border-white/[0.06]">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-medium uppercase text-muted-foreground">{e.type}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(e.timestamp, 'Time unknown')}
+                          </span>
+                        </div>
+                        <p className="text-sm mt-1">{e.message}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Action: {e.action}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
             )}
-          </motion.div>
-        )}
 
-        {/* Accountability Notice */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
-          className="mt-6 p-4 rounded-xl bg-warning/5 border border-warning/10 flex items-start gap-3"
-        >
-          <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm text-warning font-medium">Accountability Notice</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              All actions are logged. SLA breaches trigger automatic escalation. Resolution times affect your performance metrics.
-            </p>
+            {/* Accountability Notice */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              className="mt-6 p-4 rounded-xl bg-warning/5 border border-warning/10 flex items-start gap-3"
+            >
+              <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-warning font-medium">Accountability Notice</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  All actions are logged. SLA breaches trigger automatic escalation. Resolution times affect your performance metrics.
+                </p>
+              </div>
+            </motion.div>
           </div>
-        </motion.div>
-       </div>
 
-        {/* RIGHT COLUMN: Sidebar (1/4 width) */}
-        <div className="lg:col-span-1 space-y-6">
+          {/* RIGHT COLUMN: Sidebar (1/4 width) */}
+          <div className="lg:col-span-1 space-y-6">
             {/* Predictive Analytics Widget */}
             <div className="glass-panel p-4">
-                <PredictionWidget />
+              <PredictionWidget />
             </div>
 
             {/* Quick Actions / Notices */}
             <div className="glass-panel p-4">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-primary" />
-                    Pending Verification
-                </h3>
-                <div className="space-y-2">
-                    {complaints.filter(c => c.status === 'resolved' && !c.resolutionVerified).slice(0, 3).map(c => (
-                        <div key={c.id} className="p-3 bg-white/5 rounded-lg border border-white/10 hover:border-primary/30 transition-colors cursor-pointer" onClick={() => setVerifyModal({ isOpen: true, complaint: c })}>
-                             <p className="text-xs font-medium truncate">{c.title}</p>
-                             <p className="text-[10px] text-muted-foreground mt-1">Marked resolved • Click to verify</p>
-                        </div>
-                    ))}
-                    {complaints.filter(c => c.status === 'resolved' && !c.resolutionVerified).length === 0 && (
-                        <p className="text-xs text-muted-foreground italic">No resolutions pending verification.</p>
-                    )}
-                </div>
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-primary" />
+                Pending Verification
+              </h3>
+              <div className="space-y-2">
+                {complaints.filter(c => c.status === 'resolved' && !c.resolutionVerified).slice(0, 3).map(c => (
+                  <div key={c.id} className="p-3 bg-white/5 rounded-lg border border-white/10 hover:border-primary/30 transition-colors cursor-pointer" onClick={() => setVerifyModal({ isOpen: true, complaint: c })}>
+                    <p className="text-xs font-medium truncate">{c.title}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Marked resolved • Click to verify</p>
+                  </div>
+                ))}
+                {complaints.filter(c => c.status === 'resolved' && !c.resolutionVerified).length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">No resolutions pending verification.</p>
+                )}
+              </div>
             </div>
 
-             <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
-                className="p-4 rounded-xl bg-warning/5 border border-warning/10 flex items-start gap-3"
-             >
-                <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                <div>
-                   <p className="text-sm text-warning font-medium">Accountability Notice</p>
-                   <p className="text-xs text-muted-foreground mt-1">
-                      All actions are logged. SLA breaches trigger automatic escalation.
-                   </p>
-                </div>
-             </motion.div>
-        </div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              className="p-4 rounded-xl bg-warning/5 border border-warning/10 flex items-start gap-3"
+            >
+              <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-warning font-medium">Accountability Notice</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  All actions are logged. SLA breaches trigger automatic escalation.
+                </p>
+              </div>
+            </motion.div>
+          </div>
         </div>
 
         {/* AI Recommendation Modal */}
@@ -847,26 +852,37 @@ export default function OfficialDashboard() {
 
         {/* Resolution Verification Modal */}
         <Dialog open={verifyModal.isOpen} onOpenChange={(isOpen) => setVerifyModal({ ...verifyModal, isOpen })}>
-             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                 <DialogHeader>
-                     <DialogTitle>AI Resolution Verification</DialogTitle>
-                 </DialogHeader>
-                 {verifyModal.complaint && verifyModal.complaint.imageBase64 && (
-                     <ResolutionVerifier 
-                        complaintId={verifyModal.complaint.id}
-                        beforeImage={verifyModal.complaint.imageBase64}
-                        onVerified={() => {
-                            setVerifyModal({ isOpen: false, complaint: null });
-                            // Refresh complaints
-                            api.getAllComplaints().then(res => setComplaints(res.complaints || []));
-                        }}
-                     />
-                 )}
-                 {verifyModal.complaint && !verifyModal.complaint.imageBase64 && (
-                     <div className="p-8 text-center text-muted-foreground">Original image not available for verification.</div>
-                 )}
-             </DialogContent>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>AI Resolution Verification</DialogTitle>
+            </DialogHeader>
+            {verifyModal.complaint && verifyModal.complaint.imageBase64 && (
+              <ResolutionVerifier
+                complaintId={verifyModal.complaint.id}
+                beforeImage={verifyModal.complaint.imageBase64}
+                onVerified={() => {
+                  setVerifyModal({ isOpen: false, complaint: null });
+                  // Refresh complaints
+                  api.getAllComplaints().then(res => setComplaints(res.complaints || []));
+                }}
+              />
+            )}
+            {verifyModal.complaint && !verifyModal.complaint.imageBase64 && (
+              <div className="p-8 text-center text-muted-foreground">Original image not available for verification.</div>
+            )}
+          </DialogContent>
         </Dialog>
+
+        {/* Complaint Detail Modal with Image */}
+        <ComplaintDetailModal
+          isOpen={detailModal.isOpen}
+          onClose={() => setDetailModal({ isOpen: false, complaint: null })}
+          complaint={detailModal.complaint}
+          onUpdateStatus={async (complaintId, status) => {
+            await handleUpdateStatus(complaintId, status as any);
+            setDetailModal({ isOpen: false, complaint: null });
+          }}
+        />
       </main>
     </div>
   );

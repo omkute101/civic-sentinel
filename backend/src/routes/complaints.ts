@@ -172,7 +172,6 @@ router.get('/:id/live', async (req: Request, res: Response) => {
         label: complaint.agentDecision?.source === 'gemini'
           ? '✅ AI Advisory (Used)'
           : '⚠️ AI Advisory (Unavailable)',
-        confidence: complaint.confidenceScore,
       },
     });
   } catch (err) {
@@ -456,7 +455,6 @@ router.get('/citizen/:citizenId', async (req: Request, res: Response) => {
           label: c.agentDecision?.source === 'gemini'
             ? '✅ AI Advisory (Used)'
             : '⚠️ AI Advisory (Unavailable)',
-          confidence: c.confidenceScore,
         },
       };
     });

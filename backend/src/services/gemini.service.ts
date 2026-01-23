@@ -107,7 +107,7 @@ Return ONLY valid JSON in this exact schema (no markdown, no commentary):
     imageBase64: string,
     title: string,
     coordinates: { latitude: number; longitude: number }
-  ): Promise<GeminiAnalysisResult> {
+  ): Promise<any> {
     try {
       const model = getModel();
 

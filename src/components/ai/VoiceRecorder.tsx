@@ -71,41 +71,26 @@ export function VoiceRecorder({ onTranscription, citizenId, coordinates, locatio
         const base64Audio = reader.result as string;
         
         try {
-          console.log('🎤 Sending voice to API...');
-          console.log('📍 Backend URL: http://localhost:5000/api/ai/voice-complaint');
-          console.log('🔊 Audio size:', base64Audio.length, 'bytes');
-          
-          // Make direct fetch call to verify connectivity
-          const directResponse = await fetch('http://localhost:5000/api/ai/voice-complaint', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              audioBase64: base64Audio,
-              mimeType: 'audio/webm',
-              citizenId,
-              coordinates,
-              locationName,
-            }),
+          const result = await api.submitVoiceComplaint({
+            audioBase64: base64Audio,
+            mimeType: 'audio/webm',
+            citizenId,
+            coordinates,
+            locationName,
           });
 
-          console.log('📡 Response status:', directResponse.status);
-          const responseData = await directResponse.json();
-          console.log('📡 Response data:', responseData);
-
-          if (directResponse.ok && responseData.success) {
-            onTranscription(responseData);
+          if (result.success) {
+            onTranscription(result);
             toast({
-              title: '✅ Voice Processed',
+              title: 'Voice Processed',
               description: 'AI successfully analyzed your voice report.',
             });
-          } else {
-            throw new Error(responseData.error || 'Request failed');
           }
         } catch (error) {
-           console.error('❌ Voice processing error:', error);
+           console.error('Voice processing error:', error);
            toast({
              title: 'Processing Failed',
-             description: error instanceof Error ? error.message : 'Could not analyze voice. Please try again.',
+             description: 'Could not analyze voice. Please try again.',
              variant: 'destructive'
            });
         } finally {
@@ -113,7 +98,6 @@ export function VoiceRecorder({ onTranscription, citizenId, coordinates, locatio
         }
       };
     } catch (error) {
-      console.error('❌ Audio processing error:', error);
       setIsProcessing(false);
     }
   };

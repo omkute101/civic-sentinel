@@ -13,22 +13,14 @@ router.post('/voice-complaint', async (req: Request, res: Response) => {
   try {
     const { audioBase64, mimeType, citizenId, citizenName, coordinates, locationName } = req.body;
 
-    console.log('🎤 [VOICE ROUTE HIT] Processing voice complaint...');
-    console.log('📍 Received body keys:', Object.keys(req.body));
-    console.log('📍 citizenId:', citizenId ? '✓' : '✗');
-    console.log('📍 audioBase64 length:', audioBase64 ? audioBase64.length : 0);
-
     if (!audioBase64 || !citizenId) {
-      console.error('❌ Missing required fields');
       return res.status(400).json({ error: 'Missing audioBase64 or citizenId' });
     }
 
-    console.log('🎤 Calling Gemini analysis...');
+    console.log('🎤 Processing voice complaint...');
     
     // Analyze voice with Gemini
     const voiceResult = await geminiService.analyzeVoiceComplaint(audioBase64, mimeType || 'audio/webm');
-
-    console.log('✅ Gemini analysis complete:', voiceResult);
 
     res.json({
       success: true,
@@ -41,7 +33,7 @@ router.post('/voice-complaint', async (req: Request, res: Response) => {
       message: 'Voice analyzed successfully. Use this data to create complaint.',
     });
   } catch (err: any) {
-    console.error('❌ Voice complaint failed:', err);
+    console.error('Voice complaint failed:', err);
     res.status(500).json({ error: err.message || 'Failed to process voice' });
   }
 });

@@ -366,6 +366,7 @@ export class FirebaseService {
       ...data,
       createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt),
       updatedAt: data.updatedAt?.toDate?.() || new Date(data.updatedAt),
+      currencyAwardedAt: data.currencyAwardedAt?.toDate?.() || (data.currencyAwardedAt ? new Date(data.currencyAwardedAt) : undefined),
       escalationHistory: (data.escalationHistory || []).map((e: any) => ({
         ...e,
         timestamp: e.timestamp?.toDate?.() || new Date(e.timestamp),
@@ -375,6 +376,30 @@ export class FirebaseService {
         timestamp: entry.timestamp?.toDate?.() || new Date(entry.timestamp),
       })),
     } as Complaint;
+  }
+
+  /**
+   * Update citizen's currency balance
+   */
+  async updateCitizenCurrency(citizenId: string, amount: number): Promise<number> {
+    const userRef = db.collection('users').doc(citizenId);
+    const userDoc = await userRef.get();
+
+    const currentBalance = userDoc.exists ? (userDoc.data()?.currency || 0) : 0;
+    const newBalance = currentBalance + amount;
+
+    await userRef.set({ currency: newBalance }, { merge: true });
+
+    console.log(`💰 Citizen ${citizenId} currency: ${currentBalance} + ${amount} = ${newBalance}`);
+    return newBalance;
+  }
+
+  /**
+   * Get citizen's current currency balance
+   */
+  async getCitizenCurrency(citizenId: string): Promise<number> {
+    const userDoc = await db.collection('users').doc(citizenId).get();
+    return userDoc.exists ? (userDoc.data()?.currency || 0) : 0;
   }
 }
 

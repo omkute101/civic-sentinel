@@ -19,6 +19,9 @@ import {
   AlertCircle,
   Brain,
   ShieldCheck,
+  Coins,
+  LayoutGrid,
+  LayoutList,
 } from 'lucide-react';
 import { PredictionWidget } from '@/components/ai/PredictionWidget';
 import { ResolutionVerifier } from '@/components/ai/ResolutionVerifier';
@@ -38,6 +41,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
+import { ComplaintCard } from '@/components/ComplaintCard';
 import { DropResult } from '@hello-pangea/dnd';
 
 export default function OfficialDashboard() {
@@ -59,6 +63,8 @@ export default function OfficialDashboard() {
   const [liveEscalated, setLiveEscalated] = useState(0);
   const [flash, setFlash] = useState(false);
   const [expandedIssues, setExpandedIssues] = useState<Record<string, boolean>>({});
+  const [currency, setCurrency] = useState<number>(0);
+  const [viewMode, setViewMode] = useState<'card' | 'kanban'>('kanban');
   const [recommendationModal, setRecommendationModal] = useState<{ isOpen: boolean; complaint: Complaint | null }>({
     isOpen: false,
     complaint: null,
@@ -124,6 +130,24 @@ export default function OfficialDashboard() {
     const interval = setInterval(fetchLive, 5000);
     return () => clearInterval(interval);
   }, [liveEscalated]);
+
+  // Fetch user currency balance
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+
+    const fetchCurrency = async () => {
+      try {
+        const balance = await api.getUserCurrency(userProfile.uid);
+        setCurrency(balance);
+      } catch (err) {
+        console.error('Failed to fetch currency:', err);
+      }
+    };
+
+    fetchCurrency();
+    const currencyInterval = setInterval(fetchCurrency, 10000);
+    return () => clearInterval(currencyInterval);
+  }, [userProfile?.uid]);
 
   // Authoritative deadline reader; keeps hoisted for use in memos
   function getDeadline(c: Complaint) {
@@ -460,6 +484,12 @@ export default function OfficialDashboard() {
                 </span>
               </Button>
 
+              {/* Currency Display */}
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20">
+                <Coins className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">{currency.toLocaleString()}</span>
+              </div>
+
               <div className="flex items-center gap-3">
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-medium">{userProfile?.displayName || 'Official'}</p>
@@ -650,15 +680,39 @@ export default function OfficialDashboard() {
         >
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold">Complaint Board</h2>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search issues..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary"
-              />
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search issues..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 pr-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary"
+                />
+              </div>
+              
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 p-1 bg-white/5 border border-white/10 rounded-lg">
+                <Button
+                  variant={viewMode === 'card' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('card')}
+                  className="h-8 px-3"
+                  title="Card View"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('kanban')}
+                  className="h-8 px-3"
+                  title="Kanban View"
+                >
+                  <LayoutList className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -691,7 +745,7 @@ export default function OfficialDashboard() {
             <div className="py-12 text-center text-muted-foreground">Loading board...</div>
           )}
 
-          {!loading && (
+          {!loading && viewMode === 'kanban' && (
              <div className="min-h-[600px]">
                 <KanbanBoard 
                   complaints={sortedComplaints} 
@@ -701,6 +755,25 @@ export default function OfficialDashboard() {
                   showCitizenName={true}
                 />
              </div>
+          )}
+          
+          {!loading && viewMode === 'card' && (
+            <div className="space-y-4">
+              {sortedComplaints.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground">
+                  No complaints found
+                </div>
+              ) : (
+                sortedComplaints.map((complaint) => (
+                  <ComplaintCard
+                    key={complaint.id}
+                    complaint={complaint}
+                    onView={openTimeline}
+                    showCitizenName={true}
+                  />
+                ))
+              )}
+            </div>
           )}
         </motion.div>
 

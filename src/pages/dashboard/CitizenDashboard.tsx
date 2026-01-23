@@ -15,12 +15,16 @@ import {
   Search,
   MapPin,
   AlertTriangle,
+  Coins,
+  LayoutGrid,
+  LayoutList,
 } from 'lucide-react';
 import { Complaint, TimelineEvent } from '@/types/complaint';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeDate, formatDate, formatRelativeTime } from '@/lib/dateUtils';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
+import { ComplaintCard } from '@/components/ComplaintCard';
 import { AiChatWidget } from '@/components/ai/AiChatWidget';
 
 export default function CitizenDashboard() {
@@ -37,6 +41,8 @@ export default function CitizenDashboard() {
   const [selected, setSelected] = useState<Complaint | null>(null);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [currency, setCurrency] = useState<number>(0);
+  const [viewMode, setViewMode] = useState<'card' | 'kanban'>('kanban');
 
   // Geolocation state
   const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -125,6 +131,26 @@ export default function CitizenDashboard() {
     const interval = setInterval(() => fetchComplaints(true), 5000);
     return () => clearInterval(interval);
   }, [userProfile?.uid, toast]);
+
+  // Fetch user currency
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+
+    const fetchCurrency = async () => {
+      try {
+        const result = await api.getUserCurrency(userProfile.uid);
+        setCurrency(result.currency ?? 0);
+      } catch (error) {
+        console.error('Failed to fetch currency:', error);
+      }
+    };
+
+    fetchCurrency();
+
+    // Poll for currency updates every 10 seconds
+    const interval = setInterval(fetchCurrency, 10000);
+    return () => clearInterval(interval);
+  }, [userProfile?.uid]);
 
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 1000);
@@ -234,6 +260,12 @@ export default function CitizenDashboard() {
                   0
                 </span>
               </Button>
+
+              {/* Currency Display */}
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20">
+                <Coins className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold text-primary">{currency}</span>
+              </div>
 
               <div className="flex items-center gap-3">
                 <div className="text-right hidden sm:block">
@@ -378,21 +410,45 @@ export default function CitizenDashboard() {
         >
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold">Your Complaint Board</h2>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary"
-              />
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 pr-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-primary"
+                />
+              </div>
+              
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 p-1 bg-white/5 border border-white/10 rounded-lg">
+                <Button
+                  variant={viewMode === 'card' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('card')}
+                  className="h-8 px-3"
+                  title="Card View"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('kanban')}
+                  className="h-8 px-3"
+                  title="Kanban View"
+                >
+                  <LayoutList className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
 
           {loading ? (
              <div className="py-12 text-center text-muted-foreground">Loading board...</div>
-          ) : (
+          ) : viewMode === 'kanban' ? (
             <div className="min-h-[500px]">
                 <KanbanBoard
                    complaints={filteredComplaints}
@@ -406,6 +462,23 @@ export default function CitizenDashboard() {
                      done: 'Resolved'
                    }}
                 />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredComplaints.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground">
+                  No complaints found
+                </div>
+              ) : (
+                filteredComplaints.map((complaint) => (
+                  <ComplaintCard
+                    key={complaint.id}
+                    complaint={complaint}
+                    onView={openTimeline}
+                    showCitizenName={false}
+                  />
+                ))
+              )}
             </div>
           )}
         </motion.div>

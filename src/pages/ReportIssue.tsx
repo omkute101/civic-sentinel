@@ -20,6 +20,9 @@ import {
     Clock,
     Brain,
     Zap,
+    Mic,
+    MicOff,
+    StopCircle,
 } from 'lucide-react';
 
 export default function ReportIssue() {
@@ -46,6 +49,12 @@ export default function ReportIssue() {
 
     // Drag and drop state
     const [isDragging, setIsDragging] = useState(false);
+
+    // Voice recording state
+    const [isRecording, setIsRecording] = useState(false);
+    const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+    const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+    const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
 
     // Request geolocation on mount
     useEffect(() => {
@@ -218,6 +227,107 @@ export default function ReportIssue() {
         setPhase('input');
     };
 
+    // Voice recording handlers
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            const chunks: Blob[] = [];
+
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    chunks.push(e.data);
+                }
+            };
+
+            recorder.onstop = async () => {
+                const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+                await processVoiceComplaint(audioBlob);
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            recorder.start();
+            setMediaRecorder(recorder);
+            setAudioChunks(chunks);
+            setIsRecording(true);
+
+            toast({
+                title: '🎤 Recording...',
+                description: 'Speak clearly about the issue you want to report',
+            });
+        } catch (err) {
+            console.error('Failed to start recording:', err);
+            toast({
+                title: 'Microphone access denied',
+                description: 'Please allow microphone access to use voice reporting',
+                variant: 'destructive',
+            });
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorder && isRecording) {
+            mediaRecorder.stop();
+            setIsRecording(false);
+        }
+    };
+
+    const processVoiceComplaint = async (audioBlob: Blob) => {
+        setIsProcessingVoice(true);
+        try {
+            // Convert blob to base64
+            const reader = new FileReader();
+            const base64Promise = new Promise<string>((resolve) => {
+                reader.onloadend = () => {
+                    const base64 = (reader.result as string).split(',')[1];
+                    resolve(base64);
+                };
+                reader.readAsDataURL(audioBlob);
+            });
+
+            const audioBase64 = await base64Promise;
+
+            // Call voice analysis endpoint directly
+            const response = await fetch('http://localhost:5000/api/ai/voice-complaint', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    audioBase64: `data:audio/webm;base64,${audioBase64}`,
+                    mimeType: audioBlob.type,
+                    citizenId: userProfile?.uid,
+                    citizenName: userProfile?.displayName || 'Anonymous',
+                    coordinates: coordinates ? {
+                        lat: coordinates.latitude,
+                        lng: coordinates.longitude,
+                    } : null,
+                    locationName,
+                }),
+            });
+
+            if (!response.ok) throw new Error('Voice analysis failed');
+
+            const data = await response.json();
+
+            // Auto-fill form with AI analysis
+            setTitle(data.transcription?.substring(0, 100) || '');
+
+            toast({
+                title: '✅ Voice processed!',
+                description: `Category: ${data.category || 'Unknown'} • Severity: ${data.severity || 'Medium'}`,
+            });
+
+        } catch (err) {
+            console.error('Voice processing failed:', err);
+            toast({
+                title: 'Voice processing failed',
+                description: 'Please try again or type manually',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsProcessingVoice(false);
+        }
+    };
+
     const canSubmit = title.trim() && imageBase64 && coordinates && !locationLoading;
 
     // Get authenticity badge info
@@ -360,19 +470,39 @@ export default function ReportIssue() {
                                         </div>
                                     </div>
 
-                                    {/* Title Input */}
+                                    {/* Title Input with Voice Button */}
                                     <div>
                                         <label className="block mb-2 font-medium">
                                             Issue Title <span className="text-red-400">*</span>
                                         </label>
-                                        <input
-                                            type="text"
-                                            value={title}
-                                            onChange={(e) => setTitle(e.target.value)}
-                                            placeholder="e.g., Large pothole on Main Street"
-                                            maxLength={100}
-                                            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
-                                        />
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={title}
+                                                onChange={(e) => setTitle(e.target.value)}
+                                                placeholder="e.g., Large pothole on Main Street"
+                                                maxLength={100}
+                                                className="w-full px-4 py-3 pr-12 bg-white/5 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={isRecording ? stopRecording : startRecording}
+                                                disabled={isProcessingVoice}
+                                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-all ${
+                                                    isRecording
+                                                        ? 'bg-red-500/30 text-red-400 animate-pulse'
+                                                        : 'bg-primary/20 text-primary hover:bg-primary/30'
+                                                } ${isProcessingVoice ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            >
+                                                {isProcessingVoice ? (
+                                                    <StopCircle className="w-4 h-4" />
+                                                ) : isRecording ? (
+                                                    <MicOff className="w-4 h-4" />
+                                                ) : (
+                                                    <Mic className="w-4 h-4" />
+                                                )}
+                                            </button>
+                                        </div>
                                     </div>
 
                                     {/* Location Display */}
